@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spin & Win</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0; padding: 0;
+      display: flex; justify-content: center; align-items: center;
+      height: 100vh; background: #f0f2f5;
+    }
+    .container {
+      width: 100%; max-width: 400px;
+      background: white; border-radius: 15px;
+      padding: 20px; text-align: center;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    input, button {
+      width: 90%; padding: 10px; margin: 10px 0;
+      border-radius: 8px; border: 1px solid #ddd; font-size: 16px;
+    }
+    button {
+      background: #007bff; color: white; border: none; cursor: pointer;
+    }
+    button:disabled { background: #999; cursor: not-allowed; }
+    .hidden { display: none; }
+    canvas {
+      margin: 20px auto;
+      display: block;
+      border-radius: 50%;
+      border: 8px solid #333;
+      background: #fff;
+    }
+    #pointer {
+      width: 0; height: 0;
+      border-left: 15px solid transparent;
+      border-right: 15px solid transparent;
+      border-bottom: 30px solid red;
+      justify-self: center;
+      position: relative;
+      top: 160px;
+      left: 125px;
+      rotate: 22deg;
+
+    }
+    .section { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container" id="loginPage">
+    <h2>Login</h2>
+    <input type="text" id="name" placeholder="Enter Name" required>
+    <input type="email" id="email" placeholder="Enter Email" required>
+    <br>
+    <p>*Please enter your active Email for withdrawls*</p>
+    <button onclick="login()">Login</button>
+    <p id="loginError" style="color:#ff0000;"></p>
+  </div>
+
+  <div class="container hidden" id="dashboard">
+    <h2>Welcome, <span id="userName"></span></h2>
+    <h3>Balance: <span id="userBalance">0</span> Coins</h3>
+    <button onclick="showWithdraw()">💰 Withdraw</button>
+
+    <div class="section">
+      <h3>🎡 Spin & Win</h3>
+      <div id="pointer"></div>
+      <canvas id="wheel" width="250" height="250"></canvas>
+      <button id="spinBtn" onclick="spin()">Spin</button>
+      <p id="spinResult"></p>
+      <p>Spins left today: <span id="spinsLeft">15</span></p>
+    </div>
+  </div>
+
+  <div class="container hidden" id="withdrawPage">
+    <h2>Withdraw</h2>
+    <p>Redeem ₹10 Google Play Gift Card (1000 Coins)</p>
+    <button id="redeemBtn" onclick="redeem()">Redeem Now</button>
+    <p id="withdrawMsg"></p>
+    <button onclick="backToDashboard()">⬅ Back</button>
+  </div>
+
+  <script>
+    let rewards = ["1", "5", "10 Coins", "15 Coins", "Better Luck", "20 Coins", "Better Luck", "30 Coins"];
+    let angles = rewards.length;
+    let startAngle = 0;
+    let spinning = false;
+    let user = JSON.parse(localStorage.getItem("userData")) || null;
+    const MAX_SPINS = 15;
+
+
+    // Draw Wheel
+    function drawWheel() {
+      let canvas = document.getElementById("wheel");
+      let ctx = canvas.getContext("2d");
+      let arc = Math.PI * 2 / angles;
+
+      for (let i = 0; i < angles; i++) {
+        let angle = startAngle + i * arc;
+        ctx.beginPath();
+        ctx.fillStyle = ["#ffeb3b","#00ffdd","#00ff22" ,"#ff00f2", "#4caf50","#f44336","#2196f3","#9c27b0"][i];
+        ctx.moveTo(125, 125);
+        ctx.arc(125, 125, 125, angle, angle + arc);
+        ctx.fill();
+        ctx.save();
+        ctx.fillStyle = "white";
+        ctx.translate(125 + Math.cos(angle + arc/2) * 80, 125 + Math.sin(angle + arc/2) * 80);
+        ctx.rotate(angle + arc/2 + Math.PI/2);
+        ctx.fillText(rewards[i], -ctx.measureText(rewards[i]).width/2, 0);
+        ctx.restore();
+      }
+    }
+
+    drawWheel();
+
+    function spin() {
+      if (spinning) return;
+      if (user.spinCount >= MAX_SPINS) {
+        document.getElementById("spinResult").innerText = "❌ Daily spin limit reached!";
+        alert("❌ Daily spin limit reached!")
+        return;
+      }
+
+      spinning = true;
+      let canvas = document.getElementById("wheel");
+      let ctx = canvas.getContext("2d");
+      let arc = Math.PI * 2 / angles;
+
+      // Random spin
+      let spinAngle = Math.floor(3000 + Math.random() * 3000);
+      let duration = 4000;
+      let start = performance.now();
+
+      function animate(time) {
+        let progress = (time - start) / duration;
+        if (progress < 1) {
+          let angle = spinAngle * easeOut(progress);
+          startAngle = angle / 180 * Math.PI;
+          ctx.clearRect(0, 0, 250, 250);
+          drawWheel();
+          requestAnimationFrame(animate);
+        } else {
+          // Final result
+          let degrees = (spinAngle % 360);
+          let index = Math.floor((angles - (degrees / (360 / angles))) % angles);
+          let result = rewards[index];
+          document.getElementById("spinResult").innerText = "Result: " + result;
+
+          if (result.includes("Coins")) {
+            let coins = parseInt(result);
+            user.balance += coins;
+          }
+
+          user.spinCount++;
+          localStorage.setItem("userData", JSON.stringify(user));
+          updateDashboard();
+
+          spinning = false;
+        }
+      }
+      requestAnimationFrame(animate);
+    }
+
+    function easeOut(t) {
+      return 1 - Math.pow(1 - t, 3);
+    }
+
+    function login() {
+      let name = document.getElementById("name").value.trim();
+      let email = document.getElementById("email").value.trim();
+      if (!name || !email) {
+        document.getElementById("loginError").innerText = "All fields required!";
+        return;
+      }
+      let saved = JSON.parse(localStorage.getItem("userData"));
+      if (saved && saved.email === email) {
+        document.getElementById("loginError").innerText = "This email is already registered!";
+        return;
+      }
+      let today = new Date().toDateString();
+      user = { name, email, balance: 0, spinDate: today, spinCount: 0 };
+      localStorage.setItem("userData", JSON.stringify(user));
+      loadDashboard();
+    }
+
+    function loadDashboard() {
+      let today = new Date().toDateString();
+      if (user.spinDate !== today) {
+        user.spinDate = today;
+        user.spinCount = 0;
+        localStorage.setItem("userData", JSON.stringify(user));
+      }
+      document.getElementById("loginPage").classList.add("hidden");
+      document.getElementById("withdrawPage").classList.add("hidden");
+      document.getElementById("dashboard").classList.remove("hidden");
+      updateDashboard();
+    }
+
+    function updateDashboard() {
+      document.getElementById("userName").innerText = user.name;
+      document.getElementById("userBalance").innerText = user.balance;
+      document.getElementById("spinsLeft").innerText = MAX_SPINS - user.spinCount;
+      document.getElementById("spinBtn").disabled = user.spinCount >= MAX_SPINS;
+    }
+
+    function showWithdraw() {
+      document.getElementById("dashboard").classList.add("hidden");
+      document.getElementById("withdrawPage").classList.remove("hidden");
+      document.getElementById("redeemBtn").disabled = user.balance < 1000;
+    }
+
+    function redeem() {
+  if (user.balance >= 1000) {
+    user.balance -= 1000;
+    localStorage.setItem("userData", JSON.stringify(user));
+    document.getElementById("withdrawMsg").innerText = "✅ ₹10 Google Play Gift Card Redeemed!";
+
+    // 🟢 Send data to Google Sheet
+    fetch("YOUR_GOOGLE_APPS_SCRIPT_URL", {
+      method: "POST",
+      body: JSON.stringify({
+        name: user.name,
+        email: user.email,
+        date: new Date().toLocaleString(),
+        reward: "₹10 Google Play Gift Card"
+      }),
+      headers: { "Content-Type": "application/json" }
+    })
+    .then(res => res.text())
+    .then(msg => console.log("Google Sheet Response:", msg))
+    .catch(err => console.error("Error:", err));
+
+  } else {
+    document.getElementById("withdrawMsg").innerText = "❌ Not enough coins!";
+  }
+}
+
+
+    function backToDashboard() {
+      loadDashboard();
+    }
+
+    if (user) loadDashboard();
+  </script>
+</body>
+</html>
